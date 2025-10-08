@@ -1,0 +1,148 @@
+config:
+  target: 'http://localhost:3001'
+  phases:
+    # Warm-up phase
+    - duration: 30
+      arrivalRate: 5
+      name: "Warm up"
+    # Ramp up phase
+    - duration: 60
+      arrivalRate: 10
+      rampTo: 50
+      name: "Ramp up load"
+    # Sustained load phase
+    - duration: 120
+      arrivalRate: 50
+      name: "Sustained load"
+    # Peak load phase
+    - duration: 60
+      arrivalRate: 100
+      name: "Peak load"
+    # Cool down phase
+    - duration: 30
+      arrivalRate: 10
+      name: "Cool down"
+  defaults:
+    headers:
+      Content-Type: 'application/json'
+  plugins:
+    metrics-by-endpoint: {}
+  ensure:
+    p95: 1000
+    p99: 2000
+    maxErrorRate: 0.01
+
+scenarios:
+  - name: "Health Check Load Test"
+    weight: 20
+    flow:
+      - get:
+          url: "/api/v1/health"
+          expect:
+            - statusCode: 200
+            - hasProperty: "success"
+            - hasProperty: "data.service"
+
+  - name: "User Registration Load Test"
+    weight: 15
+    flow:
+      - post:
+          url: "/api/v1/auth/register"
+          json:
+            firstName: "{{ $randomString() }}"
+            lastName: "{{ $randomString() }}"
+            email: "{{ $randomString() }}@example.com"
+            password: "Password123"
+            phone: "+1234567890"
+            role: "user"
+          expect:
+            - statusCode: 201
+            - hasProperty: "success"
+            - hasProperty: "data.tokens.accessToken"
+          capture:
+            - json: "$.data.tokens.accessToken"
+              as: "accessToken"
+            - json: "$.data.tokens.refreshToken"
+              as: "refreshToken"
+            - json: "$.data.user.id"
+              as: "userId"
+
+  - name: "User Login Load Test"
+    weight: 25
+    flow:
+      - post:
+          url: "/api/v1/auth/login"
+          json:
+            email: "{{ $randomString() }}@example.com"
+            password: "Password123"
+          expect:
+            - statusCode: 401
+            - hasProperty: "success"
+            - hasProperty: "message"
+
+  - name: "Profile Access Load Test"
+    weight: 20
+    flow:
+      - post:
+          url: "/api/v1/auth/register"
+          json:
+            firstName: "{{ $randomString() }}"
+            lastName: "{{ $randomString() }}"
+            email: "{{ $randomString() }}@example.com"
+            password: "Password123"
+            phone: "+1234567890"
+            role: "user"
+          capture:
+            - json: "$.data.tokens.accessToken"
+              as: "accessToken"
+      - get:
+          url: "/api/v1/auth/profile"
+          headers:
+            Authorization: "Bearer {{ accessToken }}"
+          expect:
+            - statusCode: 200
+            - hasProperty: "success"
+            - hasProperty: "data.email"
+
+  - name: "Token Refresh Load Test"
+    weight: 10
+    flow:
+      - post:
+          url: "/api/v1/auth/register"
+          json:
+            firstName: "{{ $randomString() }}"
+            lastName: "{{ $randomString() }}"
+            email: "{{ $randomString() }}@example.com"
+            password: "Password123"
+            phone: "+1234567890"
+            role: "user"
+          capture:
+            - json: "$.data.tokens.refreshToken"
+              as: "refreshToken"
+      - post:
+          url: "/api/v1/auth/refresh-token"
+          json:
+            refreshToken: "{{ refreshToken }}"
+          expect:
+            - statusCode: 200
+            - hasProperty: "success"
+            - hasProperty: "data.accessToken"
+
+  - name: "Concurrent Registration Load Test"
+    weight: 10
+    flow:
+      - loop:
+          - post:
+              url: "/api/v1/auth/register"
+              json:
+                firstName: "{{ $randomString() }}"
+                lastName: "{{ $randomString() }}"
+                email: "{{ $randomString() }}@example.com"
+                password: "Password123"
+                phone: "+1234567890"
+                role: "user"
+              expect:
+                - statusCode: 201
+                - hasProperty: "success"
+          - think: 1
+        count: 3

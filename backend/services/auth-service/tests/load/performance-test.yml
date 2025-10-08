@@ -1,0 +1,100 @@
+config:
+  target: 'http://localhost:3001'
+  phases:
+    # Baseline performance
+    - duration: 30
+      arrivalRate: 1
+      name: "Baseline"
+    # Normal load
+    - duration: 60
+      arrivalRate: 10
+      name: "Normal load"
+    # Peak performance
+    - duration: 90
+      arrivalRate: 50
+      name: "Peak performance"
+    # Sustained performance
+    - duration: 120
+      arrivalRate: 30
+      name: "Sustained performance"
+  defaults:
+    headers:
+      Content-Type: 'application/json'
+  plugins:
+    metrics-by-endpoint: {}
+  ensure:
+    p50: 100
+    p95: 500
+    p99: 1000
+    maxErrorRate: 0.001
+
+scenarios:
+  - name: "API Response Time Test"
+    weight: 40
+    flow:
+      - get:
+          url: "/api/v1/health"
+          expect:
+            - statusCode: 200
+            - hasProperty: "success"
+      - get:
+          url: "/api/v1/docs"
+          expect:
+            - statusCode: 200
+            - hasProperty: "success"
+
+  - name: "Authentication Performance Test"
+    weight: 35
+    flow:
+      - post:
+          url: "/api/v1/auth/register"
+          json:
+            firstName: "{{ $randomString() }}"
+            lastName: "{{ $randomString() }}"
+            email: "{{ $randomString() }}{{ $randomInt(1, 100000) }}@example.com"
+            password: "Password123"
+            phone: "+1234567890"
+            role: "user"
+          capture:
+            - json: "$.data.tokens.accessToken"
+              as: "accessToken"
+            - json: "$.data.tokens.refreshToken"
+              as: "refreshToken"
+      - post:
+          url: "/api/v1/auth/login"
+          json:
+            email: "{{ $randomString() }}@example.com"
+            password: "Password123"
+          expect:
+            - statusCode: 401
+
+  - name: "Protected Endpoints Performance Test"
+    weight: 25
+    flow:
+      - post:
+          url: "/api/v1/auth/register"
+          json:
+            firstName: "{{ $randomString() }}"
+            lastName: "{{ $randomString() }}"
+            email: "{{ $randomString() }}{{ $randomInt(1, 100000) }}@example.com"
+            password: "Password123"
+            phone: "+1234567890"
+            role: "user"
+          capture:
+            - json: "$.data.tokens.accessToken"
+              as: "accessToken"
+      - get:
+          url: "/api/v1/auth/profile"
+          headers:
+            Authorization: "Bearer {{ accessToken }}"
+          expect:
+            - statusCode: 200
+      - put:
+          url: "/api/v1/auth/profile"
+          headers:
+            Authorization: "Bearer {{ accessToken }}"
+          json:
+            firstName: "Updated"
+            lastName: "Name"
+          expect:
+            - statusCode: 200

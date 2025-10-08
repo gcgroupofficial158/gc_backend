@@ -1,0 +1,109 @@
+config:
+  target: 'http://localhost:3001'
+  phases:
+    # Gradual ramp up
+    - duration: 60
+      arrivalRate: 1
+      rampTo: 20
+      name: "Gradual ramp up"
+    # High load phase
+    - duration: 120
+      arrivalRate: 20
+      rampTo: 100
+      name: "High load"
+    # Stress test phase
+    - duration: 180
+      arrivalRate: 100
+      rampTo: 500
+      name: "Stress test"
+    # Recovery phase
+    - duration: 60
+      arrivalRate: 10
+      name: "Recovery"
+  defaults:
+    headers:
+      Content-Type: 'application/json'
+  plugins:
+    metrics-by-endpoint: {}
+  ensure:
+    p95: 2000
+    p99: 5000
+    maxErrorRate: 0.05
+
+scenarios:
+  - name: "High Volume Registration"
+    weight: 30
+    flow:
+      - post:
+          url: "/api/v1/auth/register"
+          json:
+            firstName: "{{ $randomString() }}"
+            lastName: "{{ $randomString() }}"
+            email: "{{ $randomString() }}{{ $randomInt(1, 10000) }}@example.com"
+            password: "Password123"
+            phone: "+1234567890"
+            role: "user"
+          expect:
+            - statusCode: [201, 409]
+            - hasProperty: "success"
+
+  - name: "Rapid Login Attempts"
+    weight: 25
+    flow:
+      - loop:
+          - post:
+              url: "/api/v1/auth/login"
+              json:
+                email: "{{ $randomString() }}@example.com"
+                password: "Password123"
+              expect:
+                - statusCode: 401
+                - hasProperty: "success"
+          - think: 0.1
+        count: 5
+
+  - name: "Concurrent Health Checks"
+    weight: 20
+    flow:
+      - loop:
+          - get:
+              url: "/api/v1/health"
+              expect:
+                - statusCode: 200
+                - hasProperty: "success"
+          - think: 0.05
+        count: 10
+
+  - name: "Mixed Operations"
+    weight: 25
+    flow:
+      - post:
+          url: "/api/v1/auth/register"
+          json:
+            firstName: "{{ $randomString() }}"
+            lastName: "{{ $randomString() }}"
+            email: "{{ $randomString() }}{{ $randomInt(1, 10000) }}@example.com"
+            password: "Password123"
+            phone: "+1234567890"
+            role: "user"
+          capture:
+            - json: "$.data.tokens.accessToken"
+              as: "accessToken"
+            - json: "$.data.tokens.refreshToken"
+              as: "refreshToken"
+      - get:
+          url: "/api/v1/health"
+          expect:
+            - statusCode: 200
+      - post:
+          url: "/api/v1/auth/refresh-token"
+          json:
+            refreshToken: "{{ refreshToken }}"
+          expect:
+            - statusCode: 200
+      - get:
+          url: "/api/v1/auth/profile"
+          headers:
+            Authorization: "Bearer {{ accessToken }}"
+          expect:
+            - statusCode: 200
