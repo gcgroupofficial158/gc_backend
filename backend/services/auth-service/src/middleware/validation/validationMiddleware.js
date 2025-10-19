@@ -47,8 +47,10 @@ class ValidationMiddleware {
         .notEmpty()
         .withMessage('Email is required')
         .isEmail()
-        .withMessage('Please provide a valid email address')
-        .normalizeEmail(),
+        .withMessage('Please provide a valid email address (e.g., user@example.com)')
+        .isLength({ min: 5, max: 254 })
+        .withMessage('Email must be between 5 and 254 characters')
+        .toLowerCase(),
       
       body('password')
         .notEmpty()
@@ -81,8 +83,10 @@ class ValidationMiddleware {
         .notEmpty()
         .withMessage('Email is required')
         .isEmail()
-        .withMessage('Please provide a valid email address')
-        .normalizeEmail(),
+        .withMessage('Please provide a valid email address (e.g., user@example.com)')
+        .isLength({ min: 5, max: 254 })
+        .withMessage('Email must be between 5 and 254 characters')
+        .toLowerCase(),
       
       body('password')
         .notEmpty()
