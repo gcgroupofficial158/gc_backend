@@ -540,6 +540,232 @@ class AuthService extends IAuthService {
       throw new Error(`Token validation failed: ${error.message}`);
     }
   }
+
+  /**
+   * Google OAuth authentication
+   * @param {string} idToken - Google ID token
+   * @returns {Promise<AuthResponse>} Authentication response
+   */
+  async googleAuth(idToken) {
+    try {
+      // Verify Google ID token
+      const googleUser = await this.verifyGoogleToken(idToken);
+      
+      if (!googleUser) {
+        throw new AuthErrorResponse(
+          'Invalid Google token',
+          401,
+          'INVALID_TOKEN'
+        );
+      }
+
+      // Check if user exists
+      let user = await this.userRepository.findByEmail(googleUser.email);
+      
+      if (!user) {
+        // Create new user for Google OAuth
+        const userData = {
+          firstName: googleUser.given_name || 'Google',
+          lastName: googleUser.family_name || 'User',
+          email: googleUser.email,
+          emailVerified: googleUser.email_verified || false,
+          provider: 'google',
+          googleId: googleUser.sub,
+          profilePicture: googleUser.picture
+        };
+        
+        user = await this.userRepository.create(userData);
+      } else {
+        // Update existing user with Google info if needed
+        if (!user.googleId) {
+          await this.userRepository.update(user._id, {
+            googleId: googleUser.sub,
+            provider: 'google',
+            profilePicture: googleUser.picture
+          });
+        }
+      }
+
+      // Generate JWT tokens
+      const tokens = await this.generateTokens(user._id, user.email);
+      
+      // Create session
+      const sessionData = await this.sessionService.createSession(
+        user._id,
+        req?.ip || 'unknown',
+        req?.get('User-Agent') || 'unknown'
+      );
+
+      const response = new AuthResponse(
+        true,
+        200,
+        'Google authentication successful',
+        {
+          user: {
+            id: user._id,
+            firstName: user.firstName,
+            lastName: user.lastName,
+            email: user.email,
+            emailVerified: user.emailVerified,
+            profilePicture: user.profilePicture,
+            provider: user.provider
+          },
+          tokens: {
+            accessToken: tokens.accessToken,
+            refreshToken: tokens.refreshToken
+          }
+        }
+      );
+
+      // Add session data to response
+      if (sessionData) {
+        response.data.session = sessionData;
+      }
+
+      return response;
+    } catch (error) {
+      if (error instanceof AuthErrorResponse) {
+        throw error;
+      }
+      throw new Error(`Google authentication failed: ${error.message}`);
+    }
+  }
+
+  /**
+   * Google OAuth callback
+   * @param {string} code - Authorization code
+   * @param {string} state - State parameter
+   * @returns {Promise<AuthResponse>} Authentication response
+   */
+  async googleCallback(code, state) {
+    try {
+      // Exchange code for tokens
+      const tokens = await this.exchangeCodeForTokens(code);
+      
+      // Get user info from Google
+      const googleUser = await this.getGoogleUserInfo(tokens.access_token);
+      
+      // Check if user exists
+      let user = await this.userRepository.findByEmail(googleUser.email);
+      
+      if (!user) {
+        // Create new user
+        const userData = {
+          firstName: googleUser.given_name || 'Google',
+          lastName: googleUser.family_name || 'User',
+          email: googleUser.email,
+          emailVerified: googleUser.email_verified || false,
+          provider: 'google',
+          googleId: googleUser.id,
+          profilePicture: googleUser.picture
+        };
+        
+        user = await this.userRepository.create(userData);
+      }
+
+      // Generate our JWT tokens
+      const jwtTokens = await this.generateTokens(user._id, user.email);
+      
+      // Create session
+      const sessionData = await this.sessionService.createSession(
+        user._id,
+        'unknown', // IP not available in callback
+        'unknown'  // User agent not available in callback
+      );
+
+      const response = new AuthResponse(
+        true,
+        200,
+        'Google OAuth callback successful',
+        {
+          user: {
+            id: user._id,
+            firstName: user.firstName,
+            lastName: user.lastName,
+            email: user.email,
+            emailVerified: user.emailVerified,
+            profilePicture: user.profilePicture,
+            provider: user.provider
+          },
+          tokens: {
+            accessToken: jwtTokens.accessToken,
+            refreshToken: jwtTokens.refreshToken
+          }
+        }
+      );
+
+      // Add session data to response
+      if (sessionData) {
+        response.data.session = sessionData;
+      }
+
+      return response;
+    } catch (error) {
+      if (error instanceof AuthErrorResponse) {
+        throw error;
+      }
+      throw new Error(`Google OAuth callback failed: ${error.message}`);
+    }
+  }
+
+  /**
+   * Verify Google ID token
+   * @param {string} idToken - Google ID token
+   * @returns {Promise<Object|null>} Decoded token payload or null
+   */
+  async verifyGoogleToken(idToken) {
+    try {
+      const { OAuth2Client } = require('google-auth-library');
+      const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+      
+      const ticket = await client.verifyIdToken({
+        idToken: idToken,
+        audience: process.env.GOOGLE_CLIENT_ID,
+      });
+      
+      const payload = ticket.getPayload();
+      return payload;
+    } catch (error) {
+      console.error('Google token verification failed:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Exchange authorization code for tokens
+   * @param {string} code - Authorization code
+   * @returns {Promise<Object>} Google tokens
+   */
+  async exchangeCodeForTokens(code) {
+    try {
+      const { OAuth2Client } = require('google-auth-library');
+      const client = new OAuth2Client(
+        process.env.GOOGLE_CLIENT_ID,
+        process.env.GOOGLE_CLIENT_SECRET,
+        process.env.GOOGLE_REDIRECT_URI
+      );
+      
+      const { tokens } = await client.getToken(code);
+      return tokens;
+    } catch (error) {
+      throw new Error(`Failed to exchange code for tokens: ${error.message}`);
+    }
+  }
+
+  /**
+   * Get user info from Google
+   * @param {string} accessToken - Google access token
+   * @returns {Promise<Object>} User info
+   */
+  async getGoogleUserInfo(accessToken) {
+    try {
+      const response = await fetch(`https://www.googleapis.com/oauth2/v2/userinfo?access_token=${accessToken}`);
+      const userInfo = await response.json();
+      return userInfo;
+    } catch (error) {
+      throw new Error(`Failed to get user info: ${error.message}`);
+    }
+  }
 }
 
 export default AuthService;
