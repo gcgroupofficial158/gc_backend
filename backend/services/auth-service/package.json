@@ -17,36 +17,43 @@
     "lint": "eslint src/",
     "lint:fix": "eslint src/ --fix"
   },
-  "keywords": ["auth", "microservice", "express", "mongodb", "jwt"],
+  "keywords": [
+    "auth",
+    "microservice",
+    "express",
+    "mongodb",
+    "jwt"
+  ],
   "author": "Ganesh Patel",
   "license": "MIT",
   "dependencies": {
-    "express": "^4.18.2",
-    "mongoose": "^8.0.3",
     "bcryptjs": "^2.4.3",
-    "jsonwebtoken": "^9.0.2",
-    "cors": "^2.8.5",
-    "helmet": "^7.1.0",
-    "morgan": "^1.10.0",
-    "dotenv": "^16.3.1",
-    "express-rate-limit": "^7.1.5",
-    "express-validator": "^7.0.1",
     "compression": "^1.7.4",
     "cookie-parser": "^1.4.6",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
     "express-mongo-sanitize": "^2.2.0",
-    "xss-clean": "^0.1.4",
-    "node-cron": "^3.0.3"
+    "express-rate-limit": "^7.1.5",
+    "express-validator": "^7.0.1",
+    "google-auth-library": "^9.15.1",
+    "helmet": "^7.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "mongoose": "^8.0.3",
+    "morgan": "^1.10.0",
+    "node-cron": "^3.0.3",
+    "xss-clean": "^0.1.4"
   },
   "devDependencies": {
-    "nodemon": "^3.0.2",
-    "jest": "^29.7.0",
-    "supertest": "^6.3.3",
-    "eslint": "^8.55.0",
-    "artillery": "^2.0.0",
-    "mongodb-memory-server": "^9.1.3",
     "@faker-js/faker": "^8.4.1",
     "@types/jest": "^29.5.8",
-    "jest-environment-node": "^29.7.0"
+    "artillery": "^2.0.0",
+    "eslint": "^8.55.0",
+    "jest": "^29.7.0",
+    "jest-environment-node": "^29.7.0",
+    "mongodb-memory-server": "^9.1.3",
+    "nodemon": "^3.0.2",
+    "supertest": "^6.3.3"
   },
   "engines": {
     "node": ">=18.0.0"

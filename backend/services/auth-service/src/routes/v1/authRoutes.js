@@ -23,6 +23,10 @@ router.post('/login',
   authController.login
 );
 
+// Google OAuth routes
+router.post('/google', authController.googleAuth);
+router.post('/google/callback', authController.googleCallback);
+
 // Refresh access token
 router.post('/refresh-token',
   validationMiddleware.refreshTokenValidation(),

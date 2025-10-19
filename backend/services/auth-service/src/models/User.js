@@ -26,7 +26,9 @@ const userSchema = new mongoose.Schema({
   },
   password: {
     type: String,
-    required: [true, 'Password is required'],
+    required: function() {
+      return !this.provider || this.provider === 'email';
+    },
     minlength: [6, 'Password must be at least 6 characters'],
     select: false // Don't include password in queries by default
   },
@@ -34,6 +36,25 @@ const userSchema = new mongoose.Schema({
     type: String,
     trim: true,
     match: [/^[\+]?[1-9][\d]{0,15}$/, 'Please enter a valid phone number']
+  },
+  // OAuth Provider fields
+  provider: {
+    type: String,
+    enum: ['email', 'google', 'facebook', 'github'],
+    default: 'email'
+  },
+  googleId: {
+    type: String,
+    sparse: true, // Allows multiple null values but enforces uniqueness for non-null values
+    unique: true
+  },
+  profilePicture: {
+    type: String,
+    trim: true
+  },
+  emailVerified: {
+    type: Boolean,
+    default: false
   },
   role: {
     type: String,

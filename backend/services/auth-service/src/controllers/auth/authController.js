@@ -320,6 +320,48 @@ class AuthController {
       timestamp: new Date().toISOString()
     });
   });
+
+  /**
+   * Google OAuth authentication
+   * @param {Object} req - Express request object
+   * @param {Object} res - Express response object
+   */
+  googleAuth = asyncHandler(async (req, res) => {
+    const { idToken } = req.body;
+    
+    if (!idToken) {
+      return res.status(400).json({
+        success: false,
+        statusCode: 400,
+        message: 'Google ID token is required',
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    const result = await this.authService.googleAuth(idToken);
+    res.status(200).json(result.toJSON());
+  });
+
+  /**
+   * Google OAuth callback
+   * @param {Object} req - Express request object
+   * @param {Object} res - Express response object
+   */
+  googleCallback = asyncHandler(async (req, res) => {
+    const { code, state } = req.body;
+    
+    if (!code) {
+      return res.status(400).json({
+        success: false,
+        statusCode: 400,
+        message: 'Authorization code is required',
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    const result = await this.authService.googleCallback(code, state);
+    res.status(200).json(result.toJSON());
+  });
 }
 
 export default new AuthController();
