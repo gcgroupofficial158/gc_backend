@@ -206,20 +206,36 @@ class Application {
    * Setup application routes
    */
   setupRoutes() {
-    // Root endpoint
-    this.app.get('/', (req, res) => {
-      res.status(200).json({
-        success: true,
-        statusCode: 200,
-        message: 'GC Group Auth Service',
-        data: {
-          service: 'auth-service',
-          version: '1.0.0',
-          environment: config.nodeEnv,
+    // Root endpoint - simple health check for monitoring
+    this.app.get('/', async (req, res) => {
+      try {
+        const mongoose = (await import('mongoose')).default;
+        const dbState = mongoose.connection.readyState;
+        const isHealthy = dbState === 1; // 1 = connected
+        
+        res.status(isHealthy ? 200 : 503).json({
+          success: isHealthy,
+          statusCode: isHealthy ? 200 : 503,
+          message: isHealthy ? 'GC Group Auth Service' : 'Service degraded - database disconnected',
+          data: {
+            service: 'auth-service',
+            version: '1.0.0',
+            environment: config.nodeEnv,
+            status: isHealthy ? 'healthy' : 'degraded',
+            database: dbState === 1 ? 'connected' : 'disconnected',
+            timestamp: new Date().toISOString()
+          },
           timestamp: new Date().toISOString()
-        },
-        timestamp: new Date().toISOString()
-      });
+        });
+      } catch (error) {
+        res.status(503).json({
+          success: false,
+          statusCode: 503,
+          message: 'Service unavailable',
+          error: error.message,
+          timestamp: new Date().toISOString()
+        });
+      }
     });
 
     // API routes

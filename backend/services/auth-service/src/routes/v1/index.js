@@ -11,19 +11,74 @@ const router = express.Router();
 const API_VERSION = 'v1';
 
 // Health check endpoint
-router.get('/health', (req, res) => {
-  res.status(200).json({
-    success: true,
-    statusCode: 200,
-    message: 'Auth Service is running',
-    data: {
+router.get('/health', async (req, res) => {
+  try {
+    const mongoose = (await import('mongoose')).default;
+    const dbState = mongoose.connection.readyState;
+    const dbStates = {
+      0: 'disconnected',
+      1: 'connected',
+      2: 'connecting',
+      3: 'disconnecting'
+    };
+
+    const memoryUsage = process.memoryUsage();
+    const healthData = {
       service: 'auth-service',
       version: API_VERSION,
+      status: 'healthy',
       timestamp: new Date().toISOString(),
-      uptime: process.uptime()
-    },
-    timestamp: new Date().toISOString()
-  });
+      uptime: Math.floor(process.uptime()),
+      environment: process.env.NODE_ENV || 'development',
+      database: {
+        status: dbStates[dbState] || 'unknown',
+        connected: dbState === 1,
+        name: mongoose.connection.name || 'N/A'
+      },
+      system: {
+        nodeVersion: process.version,
+        platform: process.platform,
+        arch: process.arch,
+        memory: {
+          rss: `${Math.round(memoryUsage.rss / 1024 / 1024)} MB`,
+          heapTotal: `${Math.round(memoryUsage.heapTotal / 1024 / 1024)} MB`,
+          heapUsed: `${Math.round(memoryUsage.heapUsed / 1024 / 1024)} MB`,
+          external: `${Math.round(memoryUsage.external / 1024 / 1024)} MB`
+        },
+        cpuUsage: process.cpuUsage()
+      },
+      socket: {
+        enabled: true,
+        status: 'active'
+      }
+    };
+
+    // Determine overall health status
+    if (dbState !== 1) {
+      healthData.status = 'degraded';
+      healthData.message = 'Database connection issue';
+    }
+
+    const statusCode = healthData.status === 'healthy' ? 200 : 503;
+
+    res.status(statusCode).json({
+      success: healthData.status === 'healthy',
+      statusCode,
+      message: healthData.status === 'healthy' 
+        ? 'Auth Service is running and healthy' 
+        : 'Auth Service is running but has issues',
+      data: healthData,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    res.status(503).json({
+      success: false,
+      statusCode: 503,
+      message: 'Health check failed',
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
 });
 
 // API documentation endpoint
