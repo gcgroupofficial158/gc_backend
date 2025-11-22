@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: gc-group-auth-service
+    env: node
+    plan: starter
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3001
+      - key: HOST
+        value: 0.0.0.0
+      # Add your environment variables in Render dashboard
+      # MONGODB_URI
+      # DB_NAME
+      # JWT_SECRET
+      # JWT_REFRESH_SECRET
+      # CORS_ORIGIN
+      # etc.
+
