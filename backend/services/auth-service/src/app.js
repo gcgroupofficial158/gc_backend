@@ -35,7 +35,7 @@ class Application {
     this.server = createServer(this.app);
     this.io = new Server(this.server, {
       cors: {
-        origin: config.cors.origin,
+        origin: '*', // Allow all origins - no CORS restrictions
         credentials: true,
         methods: ['GET', 'POST']
       }
@@ -53,30 +53,17 @@ class Application {
    */
   setupMiddleware() {
     // Handle OPTIONS preflight requests FIRST - before any other middleware
+    // Allow all origins - no CORS restrictions
     this.app.options('*', (req, res) => {
       const origin = req.headers.origin;
-      const allowedOrigins = Array.isArray(config.cors.origin) 
-        ? config.cors.origin 
-        : [config.cors.origin];
+      console.log(`🔵 OPTIONS preflight: Origin=${origin} - Allowing all origins`);
       
-      console.log(`🔵 OPTIONS preflight: Origin=${origin}, Allowed=${JSON.stringify(allowedOrigins)}`);
-      
-      if (origin && (allowedOrigins.includes(origin) || allowedOrigins.includes('*'))) {
-        res.header('Access-Control-Allow-Origin', origin);
-        res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
-        res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
-        res.header('Access-Control-Allow-Credentials', 'true');
-        res.header('Access-Control-Max-Age', '86400'); // 24 hours
-        return res.sendStatus(204);
-      }
-      
-      // Origin not in allowed list - reject
-      console.warn(`❌ OPTIONS: Blocked origin ${origin}. Allowed: ${JSON.stringify(allowedOrigins)}`);
-      return res.status(403).json({ 
-        success: false, 
-        message: 'CORS: Origin not allowed',
-        allowedOrigins 
-      });
+      res.header('Access-Control-Allow-Origin', origin || '*');
+      res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
+      res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+      res.header('Access-Control-Allow-Credentials', 'true');
+      res.header('Access-Control-Max-Age', '86400'); // 24 hours
+      return res.sendStatus(204);
     });
 
     // Security middleware
@@ -92,30 +79,10 @@ class Application {
       crossOriginEmbedderPolicy: false
     }));
 
-    // CORS configuration - must be before other middleware
+    // CORS configuration - allow all origins (no restrictions)
     this.app.use(cors({
-      origin: (origin, callback) => {
-        // Allow requests with no origin (like mobile apps or curl requests)
-        if (!origin) {
-          console.log('🔵 CORS: No origin header, allowing request');
-          return callback(null, true);
-        }
-        
-        const allowedOrigins = Array.isArray(config.cors.origin) 
-          ? config.cors.origin 
-          : [config.cors.origin];
-        
-        console.log(`🔵 CORS: Checking origin ${origin} against ${JSON.stringify(allowedOrigins)}`);
-        
-        if (allowedOrigins.includes(origin) || allowedOrigins.includes('*')) {
-          console.log(`✅ CORS: Allowing origin ${origin}`);
-          callback(null, true);
-        } else {
-          console.warn(`❌ CORS: Blocked origin ${origin}. Allowed: ${allowedOrigins.join(', ')}`);
-          callback(new Error('Not allowed by CORS'));
-        }
-      },
-      credentials: config.cors.credentials,
+      origin: '*', // Allow all origins
+      credentials: true,
       methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
       allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
       preflightContinue: false,
@@ -162,13 +129,8 @@ class Application {
     // Add CORS headers for static files
     this.app.use('/uploads', (req, res, next) => {
       const origin = req.headers.origin;
-      const allowedOrigins = Array.isArray(config.cors.origin) 
-        ? config.cors.origin 
-        : [config.cors.origin];
-      
-      if (origin && (allowedOrigins.includes(origin) || allowedOrigins.includes('*'))) {
-        res.header('Access-Control-Allow-Origin', origin);
-      }
+      // Allow all origins - no CORS restrictions
+      res.header('Access-Control-Allow-Origin', origin || '*');
       res.header('Access-Control-Allow-Methods', 'GET, OPTIONS');
       res.header('Access-Control-Allow-Headers', 'Content-Type');
       res.header('Access-Control-Allow-Credentials', 'true');
