@@ -362,6 +362,27 @@ class AuthController {
     const result = await this.authService.googleCallback(code, state);
     res.status(200).json(result.toJSON());
   });
+
+  /**
+   * Set password for Google OAuth user
+   * @param {Object} req - Express request object
+   * @param {Object} res - Express response object
+   */
+  setPasswordForGoogleUser = asyncHandler(async (req, res) => {
+    const { userId, password } = req.body;
+    
+    if (!userId || !password) {
+      return res.status(400).json({
+        success: false,
+        statusCode: 400,
+        message: 'User ID and password are required',
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    const result = await this.authService.setPasswordForGoogleUser(userId, password);
+    res.status(200).json(result);
+  });
 }
 
 export default new AuthController();

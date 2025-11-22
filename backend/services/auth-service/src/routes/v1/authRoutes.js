@@ -27,6 +27,9 @@ router.post('/login',
 router.post('/google', authController.googleAuth);
 router.post('/google/callback', authController.googleCallback);
 
+// Set password for Google OAuth user
+router.post('/set-password', authController.setPasswordForGoogleUser);
+
 // Refresh access token
 router.post('/refresh-token',
   validationMiddleware.refreshTokenValidation(),

@@ -7,6 +7,8 @@
   "scripts": {
     "start": "node src/app.js",
     "dev": "nodemon src/app.js",
+    "create-test-users": "node scripts/createTestUsers.js",
+    "clean-database": "node scripts/cleanDatabase.js",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
@@ -41,7 +43,10 @@
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.0.3",
     "morgan": "^1.10.0",
+    "multer": "^1.4.5-lts.1",
     "node-cron": "^3.0.3",
+    "socket.io": "^4.8.1",
+    "uuid": "^9.0.1",
     "xss-clean": "^0.1.4"
   },
   "devDependencies": {

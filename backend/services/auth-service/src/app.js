@@ -1,4 +1,6 @@
 import express from 'express';
+import { createServer } from 'http';
+import { Server } from 'socket.io';
 import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
@@ -7,12 +9,18 @@ import cookieParser from 'cookie-parser';
 import mongoSanitize from 'express-mongo-sanitize';
 import xss from 'xss-clean';
 import rateLimit from 'express-rate-limit';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // Import configurations and middleware
 import config from './config/config.js';
 import database from './config/database.js';
 import errorMiddleware from './middleware/error/errorMiddleware.js';
 import sessionCleanupJob from './jobs/sessionCleanupJob.js';
+import SocketHandler from './socket/socketHandler.js';
 
 // Import routes
 import v1Routes from './routes/v1/index.js';
@@ -24,6 +32,17 @@ import v1Routes from './routes/v1/index.js';
 class Application {
   constructor() {
     this.app = express();
+    this.server = createServer(this.app);
+    this.io = new Server(this.server, {
+      cors: {
+        origin: config.cors.origin,
+        credentials: true,
+        methods: ['GET', 'POST']
+      }
+    });
+    this.socketHandler = null;
+    // Make io available globally for controllers
+    this.app.set('io', this.io);
     this.setupMiddleware();
     this.setupRoutes();
     this.setupErrorHandling();
@@ -40,7 +59,7 @@ class Application {
           defaultSrc: ["'self'"],
           styleSrc: ["'self'", "'unsafe-inline'"],
           scriptSrc: ["'self'"],
-          imgSrc: ["'self'", "data:", "https:"],
+          imgSrc: ["'self'", "data:", "https:", "http://localhost:*", "http://127.0.0.1:*"],
         },
       },
       crossOriginEmbedderPolicy: false
@@ -54,7 +73,7 @@ class Application {
       allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
     }));
 
-    // Rate limiting
+    // Rate limiting - skip for health checks and be very lenient in development
     const limiter = rateLimit({
       windowMs: config.rateLimit.windowMs,
       max: config.rateLimit.max,
@@ -65,7 +84,18 @@ class Application {
         timestamp: new Date().toISOString()
       },
       standardHeaders: true,
-      legacyHeaders: false
+      legacyHeaders: false,
+      skip: (req) => {
+        // Skip rate limiting for health checks
+        if (req.path === '/api/v1/health' || req.path === '/health') {
+          return true;
+        }
+        // In development, completely disable rate limiting
+        if (config.nodeEnv === 'development') {
+          return true; // Skip rate limiting for ALL routes in development
+        }
+        return false;
+      }
     });
     this.app.use(limiter);
 
@@ -73,6 +103,18 @@ class Application {
     this.app.use(express.json({ limit: '10mb' }));
     this.app.use(express.urlencoded({ extended: true, limit: '10mb' }));
     this.app.use(cookieParser());
+
+    // Static file serving for uploads
+    // Files are saved to process.cwd()/uploads/chat, so serve from process.cwd()/uploads
+    // Add CORS headers for static files
+    this.app.use('/uploads', (req, res, next) => {
+      res.header('Access-Control-Allow-Origin', config.cors.origin || '*');
+      res.header('Access-Control-Allow-Methods', 'GET, OPTIONS');
+      res.header('Access-Control-Allow-Headers', 'Content-Type');
+      res.header('Access-Control-Allow-Credentials', 'true');
+      next();
+    });
+    this.app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 
     // Data sanitization
     this.app.use(mongoSanitize());
@@ -146,10 +188,24 @@ class Application {
       // Connect to database
       await database.connect();
 
+      // Initialize ChatService first (needed by SocketHandler and ChatController)
+      const ChatService = (await import('./services/chatService.js')).default;
+      const chatService = new ChatService(this.io);
+      
+      // Initialize ChatController and inject ChatService
+      const chatController = (await import('./controllers/chat/chatController.js')).default;
+      chatController.setChatService(chatService);
+      console.log('💬 ChatService initialized');
+
+      // Initialize Socket.io handler (will use ChatService internally)
+      this.socketHandler = new SocketHandler(this.io);
+      console.log('🔌 Socket.io initialized');
+
       // Start server
-      const server = this.app.listen(config.port, config.host, () => {
+      this.server.listen(config.port, config.host, () => {
         console.log(`🚀 Auth Service running on ${config.host}:${config.port}`);
         console.log(`📊 Environment: ${config.nodeEnv}`);
+        console.log(`🔌 Socket.io enabled for real-time features`);
         console.log(`🔗 API Documentation: http://${config.host}:${config.port}/api/v1/docs`);
         console.log(`❤️  Health Check: http://${config.host}:${config.port}/api/v1/health`);
         
@@ -160,7 +216,7 @@ class Application {
       // Graceful shutdown
       process.on('SIGTERM', () => {
         console.log('SIGTERM received. Shutting down gracefully...');
-        server.close(() => {
+        this.server.close(() => {
           console.log('Process terminated');
           database.disconnect();
         });
@@ -168,13 +224,13 @@ class Application {
 
       process.on('SIGINT', () => {
         console.log('SIGINT received. Shutting down gracefully...');
-        server.close(() => {
+        this.server.close(() => {
           console.log('Process terminated');
           database.disconnect();
         });
       });
 
-      return server;
+      return this.server;
     } catch (error) {
       console.error('Failed to start server:', error);
       process.exit(1);
@@ -186,6 +242,13 @@ class Application {
    */
   getApp() {
     return this.app;
+  }
+
+  /**
+   * Get Socket.io instance
+   */
+  getIO() {
+    return this.io;
   }
 }
 

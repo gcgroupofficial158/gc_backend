@@ -110,10 +110,10 @@ class AuthService extends IAuthService {
    */
   async login(email, password, rememberMe = false, req = null) {
     try {
-      // Find user with password
-      const user = await this.userRepository.findByEmailWithPassword(email);
-      if (!user) {
-        throw new AuthErrorResponse('Invalid email or password');
+      // Find user by email with password field
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            const user = await this.userRepository.findByEmailWithPassword(email);
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            if (!user) {
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              throw new AuthErrorResponse('Invalid email or password');
       }
 
       // Check if account is locked
@@ -124,6 +124,11 @@ class AuthService extends IAuthService {
       // Check if account is active
       if (!user.isActive) {
         throw new AuthErrorResponse('Account is deactivated');
+      }
+
+      // Check if user is Google OAuth user (no password)
+      if (user.provider === 'google' && !user.password) {
+        throw new AuthErrorResponse('This account was created with Google. Please use "Sign in with Google" or set a password in your profile settings.');
       }
 
       // Verify password
@@ -764,6 +769,41 @@ class AuthService extends IAuthService {
       return userInfo;
     } catch (error) {
       throw new Error(`Failed to get user info: ${error.message}`);
+    }
+  }
+
+  /**
+   * Set password for Google OAuth user
+   * @param {string} userId - User ID
+   * @param {string} password - New password
+   * @returns {Promise<Object>} Success response
+   */
+  async setPasswordForGoogleUser(userId, password) {
+    try {
+      // Find user
+      const user = await this.userRepository.findById(userId);
+      if (!user) {
+        throw new AuthErrorResponse('User not found');
+      }
+
+      // Check if user is Google OAuth user
+      if (user.provider !== 'google') {
+        throw new AuthErrorResponse('This user is not a Google OAuth user');
+      }
+
+      // Update user with password
+      await this.userRepository.update(userId, { password });
+
+      return {
+        success: true,
+        message: 'Password set successfully. You can now login with email and password.',
+        statusCode: 200
+      };
+    } catch (error) {
+      if (error instanceof AuthErrorResponse) {
+        throw error;
+      }
+      throw new Error(`Failed to set password: ${error.message}`);
     }
   }
 }

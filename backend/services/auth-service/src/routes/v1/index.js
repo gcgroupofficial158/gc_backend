@@ -1,5 +1,9 @@
 import express from 'express';
 import authRoutes from './authRoutes.js';
+import postRoutes from './postRoutes.js';
+import userRoutes from './userRoutes.js';
+import friendRoutes from './friendRoutes.js';
+import chatRoutes from './chatRoutes.js';
 
 const router = express.Router();
 
@@ -59,5 +63,17 @@ router.get('/docs', (req, res) => {
 
 // Mount auth routes
 router.use('/auth', authRoutes);
+
+// Mount post routes
+router.use('/posts', postRoutes);
+
+// Mount user routes
+router.use('/users', userRoutes);
+
+// Mount friend routes
+router.use('/friends', friendRoutes);
+
+// Mount chat routes
+router.use('/chat', chatRoutes);
 
 export default router;

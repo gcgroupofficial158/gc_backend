@@ -27,9 +27,22 @@ class UserRepository extends IUserRepository {
    */
   async findById(id) {
     try {
+      console.log('🔵 UserRepository.findById: Looking up user with ID:', id);
+      console.log('🔵 UserRepository.findById: ID type:', typeof id);
+      console.log('🔵 UserRepository.findById: ID value:', String(id));
+      
       // Include refreshTokens by default for service logic that may need it; still exclude password
-      return await User.findById(id).select('-password');
+      const user = await User.findById(id).select('-password');
+      console.log('🔵 UserRepository.findById: User found:', user ? 'yes' : 'no');
+      if (user) {
+        console.log('🔵 UserRepository.findById: User ID:', user._id);
+        console.log('🔵 UserRepository.findById: User email:', user.email);
+      }
+      return user;
     } catch (error) {
+      console.error('🔵 UserRepository.findById: Error:', error);
+      console.error('🔵 UserRepository.findById: Error name:', error?.name);
+      console.error('🔵 UserRepository.findById: Error message:', error?.message);
       throw new Error(`Failed to find user by ID: ${error.message}`);
     }
   }

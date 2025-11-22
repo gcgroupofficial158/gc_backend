@@ -90,8 +90,9 @@ const userSchema = new mongoose.Schema({
   sessions: [{
     sessionId: {
       type: String,
-      required: true,
-      unique: true
+      required: true
+      // Note: Unique constraint removed from nested array field to avoid index conflicts
+      // Session uniqueness is enforced at application level
     },
     deviceInfo: {
       userAgent: String,

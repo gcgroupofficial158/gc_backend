@@ -22,66 +22,107 @@ class ErrorMiddleware {
    * @param {Function} next - Express next function
    */
   handleError(err, req, res, next) {
-    let error = { ...err };
-    error.message = err.message;
+    // Check if response has already been sent
+    if (res.headersSent) {
+      console.error('Response already sent, cannot send error response');
+      return next(err);
+    }
 
-    // Log error
-    console.error('Error:', {
-      message: err.message,
-      stack: err.stack,
-      url: req.originalUrl,
-      method: req.method,
-      ip: req.ip,
-      userAgent: req.get('User-Agent')
-    });
+    // Log error with safe serialization
+    try {
+      console.error('Error:', {
+        message: err?.message || 'Unknown error',
+        name: err?.name || 'Error',
+        code: err?.code,
+        stack: err?.stack || 'No stack trace',
+        url: req?.originalUrl || 'Unknown',
+        method: req?.method || 'Unknown',
+        ip: req?.ip || 'Unknown',
+        userAgent: req?.get('User-Agent') || 'Unknown'
+      });
+    } catch (logError) {
+      console.error('Failed to log error:', logError);
+    }
+
+    let statusCode = 500;
+    let message = 'Internal server error';
+    let errors = [];
 
     // Mongoose bad ObjectId
-    if (err.name === 'CastError') {
-      const message = 'Resource not found';
-      error = new NotFoundErrorResponse(message);
+    if (err?.name === 'CastError') {
+      statusCode = 404;
+      message = 'Resource not found';
     }
-
     // Mongoose duplicate key
-    if (err.code === 11000) {
-      const field = Object.keys(err.keyValue)[0];
-      const message = `${field} already exists`;
-      error = new ConflictErrorResponse(message);
+    else if (err?.code === 11000) {
+      statusCode = 409;
+      const field = err?.keyValue ? Object.keys(err.keyValue)[0] : 'field';
+      message = `${field} already exists`;
     }
-
     // Mongoose validation error
-    if (err.name === 'ValidationError') {
-      const errors = Object.values(err.errors).map(val => val.message);
-      error = new ValidationErrorResponse(errors);
+    else if (err?.name === 'ValidationError') {
+      statusCode = 400;
+      message = 'Validation failed';
+      errors = err?.errors ? Object.values(err.errors).map(val => val?.message || 'Invalid value') : [];
     }
-
     // JWT errors
-    if (err.name === 'JsonWebTokenError') {
-      error = new AuthErrorResponse('Invalid token');
+    else if (err?.name === 'JsonWebTokenError') {
+      statusCode = 401;
+      message = 'Invalid token';
     }
-
-    if (err.name === 'TokenExpiredError') {
-      error = new AuthErrorResponse('Token expired');
+    else if (err?.name === 'TokenExpiredError') {
+      statusCode = 401;
+      message = 'Token expired';
     }
-
     // Rate limit error
-    if (err.status === 429) {
-      error = new RateLimitErrorResponse();
+    else if (err?.status === 429) {
+      statusCode = 429;
+      message = 'Too many requests, please try again later';
+    }
+    // Custom error with statusCode
+    else if (err?.statusCode) {
+      statusCode = err.statusCode;
+      message = err?.message || message;
+      errors = err?.errors || [];
+    }
+    // Use error message if available
+    else if (err?.message) {
+      message = err.message;
     }
 
-    // Default to server error
-    if (!error.statusCode) {
-      error = new ServerErrorResponse();
-    }
-
-    // Send error response
-    res.status(error.statusCode).json({
+    // Build safe response object
+    const response = {
       success: false,
-      statusCode: error.statusCode,
-      message: error.message,
-      errors: error.errors || [],
-      timestamp: new Date().toISOString(),
-      ...(config.nodeEnv === 'development' && { stack: err.stack })
-    });
+      statusCode,
+      message,
+      errors,
+      timestamp: new Date().toISOString()
+    };
+
+    // Add stack trace in development
+    if (config.nodeEnv === 'development' && err?.stack) {
+      response.stack = err.stack;
+    }
+
+    // Send error response with error handling
+    try {
+      res.status(statusCode).json(response);
+    } catch (sendError) {
+      console.error('Failed to send error response:', sendError);
+      // Last resort - try to send minimal response
+      try {
+        if (!res.headersSent) {
+          res.status(500).json({
+            success: false,
+            statusCode: 500,
+            message: 'Internal server error',
+            timestamp: new Date().toISOString()
+          });
+        }
+      } catch (finalError) {
+        console.error('Failed to send final error response:', finalError);
+      }
+    }
   }
 
   /**

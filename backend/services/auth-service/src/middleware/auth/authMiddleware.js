@@ -9,7 +9,15 @@ import { AuthErrorResponse, AuthorizationErrorResponse } from '../../interfaces/
  */
 class AuthMiddleware {
   constructor() {
-    this.userRepository = new UserRepository();
+    try {
+      console.log('🔵 AuthMiddleware constructor: Creating UserRepository instance');
+      this.userRepository = new UserRepository();
+      console.log('🔵 AuthMiddleware constructor: UserRepository created successfully');
+      console.log('🔵 AuthMiddleware constructor: this.userRepository exists:', !!this.userRepository);
+    } catch (error) {
+      console.error('🔵 AuthMiddleware constructor: Error creating UserRepository:', error);
+      throw error;
+    }
   }
 
   /**
@@ -18,26 +26,72 @@ class AuthMiddleware {
    * @param {Object} res - Express response object
    * @param {Function} next - Express next function
    */
-  async authenticate(req, res, next) {
+  authenticate = async (req, res, next) => {
     try {
+      console.log('🔵 Auth middleware: Starting authentication');
+      console.log('🔵 Auth middleware: URL:', req.originalUrl);
+      console.log('🔵 Auth middleware: Method:', req.method);
+      console.log('🔵 Auth middleware: this exists:', !!this);
+      console.log('🔵 Auth middleware: this.userRepository exists:', !!this.userRepository);
+      
+      if (!this || !this.userRepository) {
+        console.error('🔵 Auth middleware: this or userRepository is undefined!');
+        // Create repository on the fly if needed
+        if (!this.userRepository) {
+          console.log('🔵 Auth middleware: Creating UserRepository on the fly');
+          this.userRepository = new UserRepository();
+        }
+      }
+      
       const authHeader = req.headers.authorization;
+      console.log('🔵 Auth middleware: Auth header exists:', !!authHeader);
+      console.log('🔵 Auth middleware: Auth header starts with Bearer:', authHeader?.startsWith('Bearer '));
       
       if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        console.log('🔵 Auth middleware: No valid auth header');
         return res.status(401).json(new AuthErrorResponse('Access token required'));
       }
 
       const token = authHeader.substring(7); // Remove 'Bearer ' prefix
+      console.log('🔵 Auth middleware: Token extracted, length:', token.length);
       
       // Verify token
-      const decoded = jwt.verify(token, config.jwt.secret);
+      let decoded;
+      try {
+        decoded = jwt.verify(token, config.jwt.secret);
+        console.log('🔵 Auth middleware: Token verified, user ID:', decoded.id);
+      } catch (verifyError) {
+        console.error('🔵 Auth middleware: Token verification failed:', verifyError.name, verifyError.message);
+        if (verifyError.name === 'JsonWebTokenError') {
+          return res.status(401).json(new AuthErrorResponse('Invalid token'));
+        }
+        if (verifyError.name === 'TokenExpiredError') {
+          return res.status(401).json(new AuthErrorResponse('Token expired'));
+        }
+        throw verifyError;
+      }
       
       // Find user
-      const user = await this.userRepository.findById(decoded.id);
+      console.log('🔵 Auth middleware: Looking up user:', decoded.id);
+      console.log('🔵 Auth middleware: decoded object:', JSON.stringify(decoded));
+      
+      let user;
+      try {
+        user = await this.userRepository.findById(decoded.id);
+      } catch (userError) {
+        console.error('🔵 Auth middleware: Error finding user:', userError);
+        console.error('🔵 Auth middleware: User error name:', userError?.name);
+        console.error('🔵 Auth middleware: User error message:', userError?.message);
+        throw userError; // Re-throw to be caught by outer catch
+      }
+      
       if (!user) {
+        console.error('🔵 Auth middleware: User not found:', decoded.id);
         return res.status(401).json(new AuthErrorResponse('User not found'));
       }
 
       if (!user.isActive) {
+        console.error('🔵 Auth middleware: User account deactivated:', decoded.id);
         return res.status(401).json(new AuthErrorResponse('Account is deactivated'));
       }
 
@@ -45,8 +99,14 @@ class AuthMiddleware {
       req.user = user;
       req.userId = user._id;
       
+      console.log('🔵 Auth middleware: User authenticated successfully:', user._id);
       next();
     } catch (error) {
+      console.error('🔵 Auth middleware: Unexpected error:', error);
+      console.error('🔵 Auth middleware: Error name:', error?.name);
+      console.error('🔵 Auth middleware: Error message:', error?.message);
+      console.error('🔵 Auth middleware: Error stack:', error?.stack);
+      
       if (error.name === 'JsonWebTokenError') {
         return res.status(401).json(new AuthErrorResponse('Invalid token'));
       }
@@ -55,7 +115,14 @@ class AuthMiddleware {
         return res.status(401).json(new AuthErrorResponse('Token expired'));
       }
       
-      return res.status(500).json(new Error('Authentication failed'));
+      // Return proper error response
+      return res.status(500).json({
+        success: false,
+        statusCode: 500,
+        message: 'Authentication failed',
+        error: error?.message || 'Unknown authentication error',
+        timestamp: new Date().toISOString()
+      });
     }
   }
 
@@ -70,6 +137,7 @@ class AuthMiddleware {
       const authHeader = req.headers.authorization;
       
       if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        console.log('⚠️ optionalAuth - No auth header');
         return next();
       }
 
@@ -77,18 +145,24 @@ class AuthMiddleware {
       
       try {
         const decoded = jwt.verify(token, config.jwt.secret);
+        console.log('✅ optionalAuth - Token decoded, user ID:', decoded.id);
         const user = await this.userRepository.findById(decoded.id);
         
         if (user && user.isActive) {
           req.user = user;
           req.userId = user._id;
+          console.log('✅ optionalAuth - User set in req.user:', user._id);
+        } else {
+          console.log('⚠️ optionalAuth - User not found or inactive');
         }
       } catch (error) {
+        console.log('⚠️ optionalAuth - Token verification failed:', error.message);
         // Ignore token errors for optional auth
       }
       
       next();
     } catch (error) {
+      console.log('⚠️ optionalAuth - Error:', error.message);
       next();
     }
   }
