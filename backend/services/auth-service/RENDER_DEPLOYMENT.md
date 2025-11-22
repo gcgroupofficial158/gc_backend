@@ -9,9 +9,14 @@
 ### Build & Deploy Settings
 
 - **Environment**: `Node`
-- **Build Command**: `npm install`
+- **Build Command**: `npm install` (NOT just `npm`)
 - **Start Command**: `npm start`
-- **Root Directory**: `gc_backend/backend/services/auth-service` (if deploying from monorepo root)
+- **Root Directory**: `backend/services/auth-service` (relative to repo root)
+
+**IMPORTANT**: 
+- If your repo structure is `gc_backend/backend/services/auth-service`, use: `gc_backend/backend/services/auth-service`
+- If your repo structure is `backend/services/auth-service`, use: `backend/services/auth-service`
+- Check your actual repo structure and set Root Directory accordingly
 
 ### Environment Variables
 
