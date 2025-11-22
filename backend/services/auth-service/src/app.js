@@ -65,12 +65,28 @@ class Application {
       crossOriginEmbedderPolicy: false
     }));
 
-    // CORS configuration
+    // CORS configuration - must be before other middleware
     this.app.use(cors({
-      origin: config.cors.origin,
+      origin: (origin, callback) => {
+        // Allow requests with no origin (like mobile apps or curl requests)
+        if (!origin) return callback(null, true);
+        
+        const allowedOrigins = Array.isArray(config.cors.origin) 
+          ? config.cors.origin 
+          : [config.cors.origin];
+        
+        if (allowedOrigins.includes(origin) || allowedOrigins.includes('*')) {
+          callback(null, true);
+        } else {
+          console.warn(`CORS: Blocked origin ${origin}. Allowed: ${allowedOrigins.join(', ')}`);
+          callback(new Error('Not allowed by CORS'));
+        }
+      },
       credentials: config.cors.credentials,
       methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-      allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+      allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+      preflightContinue: false,
+      optionsSuccessStatus: 204
     }));
 
     // Rate limiting - skip for health checks and be very lenient in development
@@ -88,6 +104,10 @@ class Application {
       skip: (req) => {
         // Skip rate limiting for health checks
         if (req.path === '/api/v1/health' || req.path === '/health') {
+          return true;
+        }
+        // Skip rate limiting for OPTIONS requests (CORS preflight)
+        if (req.method === 'OPTIONS') {
           return true;
         }
         // In development, completely disable rate limiting
@@ -108,10 +128,22 @@ class Application {
     // Files are saved to process.cwd()/uploads/chat, so serve from process.cwd()/uploads
     // Add CORS headers for static files
     this.app.use('/uploads', (req, res, next) => {
-      res.header('Access-Control-Allow-Origin', config.cors.origin || '*');
+      const origin = req.headers.origin;
+      const allowedOrigins = Array.isArray(config.cors.origin) 
+        ? config.cors.origin 
+        : [config.cors.origin];
+      
+      if (origin && (allowedOrigins.includes(origin) || allowedOrigins.includes('*'))) {
+        res.header('Access-Control-Allow-Origin', origin);
+      }
       res.header('Access-Control-Allow-Methods', 'GET, OPTIONS');
       res.header('Access-Control-Allow-Headers', 'Content-Type');
       res.header('Access-Control-Allow-Credentials', 'true');
+      
+      // Handle OPTIONS preflight
+      if (req.method === 'OPTIONS') {
+        return res.sendStatus(204);
+      }
       next();
     });
     this.app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
