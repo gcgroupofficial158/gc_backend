@@ -70,13 +70,13 @@ class Application {
         return res.sendStatus(204);
       }
       
-      // If origin doesn't match, still allow but log warning
-      console.warn(`⚠️ CORS: Origin ${origin} not in allowed list, but allowing for debugging`);
-      res.header('Access-Control-Allow-Origin', origin || '*');
-      res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
-      res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
-      res.header('Access-Control-Allow-Credentials', 'true');
-      return res.sendStatus(204);
+      // Origin not in allowed list - reject
+      console.warn(`❌ OPTIONS: Blocked origin ${origin}. Allowed: ${JSON.stringify(allowedOrigins)}`);
+      return res.status(403).json({ 
+        success: false, 
+        message: 'CORS: Origin not allowed',
+        allowedOrigins 
+      });
     });
 
     // Security middleware
@@ -111,10 +111,8 @@ class Application {
           console.log(`✅ CORS: Allowing origin ${origin}`);
           callback(null, true);
         } else {
-          console.warn(`⚠️ CORS: Origin ${origin} not in allowed list: ${allowedOrigins.join(', ')}`);
-          // For now, allow all origins in production to debug
-          // TODO: Restrict this once we confirm the correct origin
-          callback(null, true);
+          console.warn(`❌ CORS: Blocked origin ${origin}. Allowed: ${allowedOrigins.join(', ')}`);
+          callback(new Error('Not allowed by CORS'));
         }
       },
       credentials: config.cors.credentials,
