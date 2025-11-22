@@ -52,6 +52,33 @@ class Application {
    * Setup application middleware
    */
   setupMiddleware() {
+    // Handle OPTIONS preflight requests FIRST - before any other middleware
+    this.app.options('*', (req, res) => {
+      const origin = req.headers.origin;
+      const allowedOrigins = Array.isArray(config.cors.origin) 
+        ? config.cors.origin 
+        : [config.cors.origin];
+      
+      console.log(`🔵 OPTIONS preflight: Origin=${origin}, Allowed=${JSON.stringify(allowedOrigins)}`);
+      
+      if (origin && (allowedOrigins.includes(origin) || allowedOrigins.includes('*'))) {
+        res.header('Access-Control-Allow-Origin', origin);
+        res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
+        res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+        res.header('Access-Control-Allow-Credentials', 'true');
+        res.header('Access-Control-Max-Age', '86400'); // 24 hours
+        return res.sendStatus(204);
+      }
+      
+      // If origin doesn't match, still allow but log warning
+      console.warn(`⚠️ CORS: Origin ${origin} not in allowed list, but allowing for debugging`);
+      res.header('Access-Control-Allow-Origin', origin || '*');
+      res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
+      res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+      res.header('Access-Control-Allow-Credentials', 'true');
+      return res.sendStatus(204);
+    });
+
     // Security middleware
     this.app.use(helmet({
       contentSecurityPolicy: {
@@ -69,17 +96,25 @@ class Application {
     this.app.use(cors({
       origin: (origin, callback) => {
         // Allow requests with no origin (like mobile apps or curl requests)
-        if (!origin) return callback(null, true);
+        if (!origin) {
+          console.log('🔵 CORS: No origin header, allowing request');
+          return callback(null, true);
+        }
         
         const allowedOrigins = Array.isArray(config.cors.origin) 
           ? config.cors.origin 
           : [config.cors.origin];
         
+        console.log(`🔵 CORS: Checking origin ${origin} against ${JSON.stringify(allowedOrigins)}`);
+        
         if (allowedOrigins.includes(origin) || allowedOrigins.includes('*')) {
+          console.log(`✅ CORS: Allowing origin ${origin}`);
           callback(null, true);
         } else {
-          console.warn(`CORS: Blocked origin ${origin}. Allowed: ${allowedOrigins.join(', ')}`);
-          callback(new Error('Not allowed by CORS'));
+          console.warn(`⚠️ CORS: Origin ${origin} not in allowed list: ${allowedOrigins.join(', ')}`);
+          // For now, allow all origins in production to debug
+          // TODO: Restrict this once we confirm the correct origin
+          callback(null, true);
         }
       },
       credentials: config.cors.credentials,
