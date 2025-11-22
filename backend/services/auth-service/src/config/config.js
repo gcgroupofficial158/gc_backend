@@ -6,7 +6,8 @@ const config = {
   port: process.env.PORT || 3001,
   // For Render and production: bind to 0.0.0.0 to accept external connections
   // For local dev: use localhost
-  host: process.env.HOST || (process.env.NODE_ENV === 'production' ? '0.0.0.0' : 'localhost'),
+  // Always use 0.0.0.0 if HOST is not explicitly set (for cloud deployments)
+  host: process.env.HOST || '0.0.0.0',
   nodeEnv: process.env.NODE_ENV || 'development',
 
   // Database Configuration
