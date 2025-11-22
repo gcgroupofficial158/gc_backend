@@ -4,7 +4,9 @@ dotenv.config();
 const config = {
   // Server Configuration
   port: process.env.PORT || 3001,
-  host: process.env.HOST || 'localhost',
+  // For Render and production: bind to 0.0.0.0 to accept external connections
+  // For local dev: use localhost
+  host: process.env.HOST || (process.env.NODE_ENV === 'production' ? '0.0.0.0' : 'localhost'),
   nodeEnv: process.env.NODE_ENV || 'development',
 
   // Database Configuration
