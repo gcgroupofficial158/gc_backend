@@ -76,8 +76,8 @@ router.get('/health', async (req, res) => {
       statusCode: 200,
       message: 'Health check completed',
       error: error.message,
-      timestamp: new Date().toISOString()
-    });
+    timestamp: new Date().toISOString()
+  });
   }
 });
 

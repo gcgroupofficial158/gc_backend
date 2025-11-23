@@ -95,7 +95,7 @@ class Application {
       optionsSuccessStatus: 204
     }));
 
-    // Rate limiting - skip for health checks and be very lenient in development
+    // Rate limiting - skip for health checks and be very lenient
     const limiter = rateLimit({
       windowMs: config.rateLimit.windowMs,
       max: config.rateLimit.max,
@@ -120,6 +120,16 @@ class Application {
         if (config.nodeEnv === 'development') {
           return true; // Skip rate limiting for ALL routes in development
         }
+        // Skip rate limiting for static file requests (images, uploads)
+        if (req.path.startsWith('/uploads/')) {
+          return true;
+        }
+        // Skip rate limiting for socket.io requests
+        if (req.path.startsWith('/socket.io/')) {
+          return true;
+        }
+        // For testing/production, be very lenient - only rate limit if explicitly needed
+        // Most requests will pass through
         return false;
       }
     });
@@ -182,20 +192,20 @@ class Application {
         const isHealthy = dbState === 1; // 1 = connected
         
         // Always return 200 for monitoring tools
-        res.status(200).json({
-          success: true,
-          statusCode: 200,
+      res.status(200).json({
+        success: true,
+        statusCode: 200,
           message: isHealthy ? 'GC Group Auth Service' : 'GC Group Auth Service - Database disconnected',
-          data: {
-            service: 'auth-service',
-            version: '1.0.0',
-            environment: config.nodeEnv,
+        data: {
+          service: 'auth-service',
+          version: '1.0.0',
+          environment: config.nodeEnv,
             status: isHealthy ? 'healthy' : 'degraded',
             database: dbState === 1 ? 'connected' : 'disconnected',
-            timestamp: new Date().toISOString()
-          },
           timestamp: new Date().toISOString()
-        });
+        },
+        timestamp: new Date().toISOString()
+      });
       } catch (error) {
         // Even on error, return 200 (monitoring tools expect 200)
         res.status(200).json({

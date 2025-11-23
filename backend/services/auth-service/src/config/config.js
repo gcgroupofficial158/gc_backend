@@ -35,10 +35,10 @@ const config = {
     rounds: parseInt(process.env.BCRYPT_ROUNDS) || 12
   },
 
-  // Rate Limiting
+  // Rate Limiting - Very lenient for testing
   rateLimit: {
     windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000, // 15 minutes
-    max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || (process.env.NODE_ENV === 'development' ? 100000 : 100) // Very high limit for development (effectively disabled via skip)
+    max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || (process.env.NODE_ENV === 'development' ? 100000 : 10000) // Very high limit: 10000 requests per 15 minutes for production/testing
   },
 
   // CORS Configuration
