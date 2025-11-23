@@ -549,9 +549,10 @@ class AuthService extends IAuthService {
   /**
    * Google OAuth authentication
    * @param {string} idToken - Google ID token
+   * @param {Object} req - Express request object (optional)
    * @returns {Promise<AuthResponse>} Authentication response
    */
-  async googleAuth(idToken) {
+  async googleAuth(idToken, req = null) {
     try {
       // Verify Google ID token
       const googleUser = await this.verifyGoogleToken(idToken);
@@ -591,15 +592,56 @@ class AuthService extends IAuthService {
         }
       }
 
-      // Generate JWT tokens
-      const tokens = await this.generateTokens(user._id, user.email);
-      
-      // Create session
-      const sessionData = await this.sessionService.createSession(
-        user._id,
-        req?.ip || 'unknown',
-        req?.get('User-Agent') || 'unknown'
-      );
+      // Generate tokens and create session
+      let sessionData = null;
+      let accessToken, refreshToken;
+
+      if (req) {
+        // Check for existing session from same device
+        const existingSession = await this.sessionService.findExistingSession(user._id, req);
+        
+        if (existingSession) {
+          // User is already logged in from same device
+          // Update session activity and return existing session info
+          await this.sessionService.validateSession(user._id, existingSession.sessionId);
+          
+          // Generate new tokens with existing session ID
+          const payload = {
+            id: user._id,
+            email: user.email,
+            role: user.role,
+            sessionId: existingSession.sessionId
+          };
+          
+          accessToken = jwt.sign(payload, config.jwt.secret, { expiresIn: config.jwt.expiresIn });
+          refreshToken = jwt.sign(payload, config.jwt.refreshSecret, { expiresIn: config.jwt.refreshExpiresIn });
+          
+          sessionData = {
+            sessionId: existingSession.sessionId,
+            deviceInfo: existingSession.deviceInfo,
+            isExistingSession: true
+          };
+        } else {
+          // Create new session
+          sessionData = await this.sessionService.createSession(user._id, req);
+          accessToken = sessionData.accessToken;
+          refreshToken = sessionData.refreshToken;
+        }
+      } else {
+        // Fallback for non-session based login
+        const payload = {
+          id: user._id,
+          email: user.email,
+          role: user.role
+        };
+        
+        const tokens = this.generateTokens(payload);
+        accessToken = tokens.accessToken;
+        refreshToken = tokens.refreshToken;
+        
+        // Add refresh token to user
+        await this.userRepository.addRefreshToken(user._id, refreshToken);
+      }
 
       const response = new AuthResponse(
         true,
@@ -616,8 +658,8 @@ class AuthService extends IAuthService {
             provider: user.provider
           },
           tokens: {
-            accessToken: tokens.accessToken,
-            refreshToken: tokens.refreshToken
+            accessToken: accessToken,
+            refreshToken: refreshToken
           }
         }
       );

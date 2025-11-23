@@ -338,7 +338,7 @@ class AuthController {
       });
     }
 
-    const result = await this.authService.googleAuth(idToken);
+    const result = await this.authService.googleAuth(idToken, req);
     res.status(200).json(result.toJSON());
   });
 
