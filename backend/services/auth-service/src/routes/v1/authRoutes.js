@@ -27,6 +27,10 @@ router.post('/login',
 router.post('/google', authController.googleAuth);
 router.post('/google/callback', authController.googleCallback);
 
+// Google OAuth state management
+router.post('/google/generate-state', authController.generateSignedState);
+router.post('/google/validate-url', authController.validateSignedUrl);
+
 // Set password for Google OAuth user
 router.post('/set-password', authController.setPasswordForGoogleUser);
 

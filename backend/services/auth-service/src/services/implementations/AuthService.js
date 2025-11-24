@@ -681,11 +681,24 @@ class AuthService extends IAuthService {
   /**
    * Google OAuth callback
    * @param {string} code - Authorization code
-   * @param {string} state - State parameter
+   * @param {string} state - State parameter (should be signed)
    * @returns {Promise<AuthResponse>} Authentication response
    */
   async googleCallback(code, state) {
     try {
+      // Validate state parameter if provided (CSRF protection)
+      if (state) {
+        const stateValidation = this.validateSignedState(state);
+        if (!stateValidation.valid) {
+          throw new AuthErrorResponse(
+            stateValidation.error || 'Invalid state parameter',
+            401,
+            'INVALID_STATE'
+          );
+        }
+        console.log('✅ State parameter validated successfully');
+      }
+      
       // Exchange code for tokens
       const tokens = await this.exchangeCodeForTokens(code);
       
@@ -711,7 +724,12 @@ class AuthService extends IAuthService {
       }
 
       // Generate our JWT tokens
-      const jwtTokens = await this.generateTokens(user._id, user.email);
+      const payload = {
+        id: user._id,
+        email: user.email,
+        role: user.role || 'user'
+      };
+      const jwtTokens = this.generateTokens(payload);
       
       // Create session
       const sessionData = await this.sessionService.createSession(
@@ -846,6 +864,173 @@ class AuthService extends IAuthService {
         throw error;
       }
       throw new Error(`Failed to set password: ${error.message}`);
+    }
+  }
+
+  /**
+   * Generate a signed state parameter for OAuth security (CSRF protection)
+   * @param {string} data - Data to sign (e.g., user ID, session ID, or custom data)
+   * @param {number} expiresIn - Expiration time in seconds (default: 10 minutes)
+   * @returns {string} Signed state parameter (base64 encoded: data.timestamp.signature)
+   */
+  signState(data, expiresIn = 600) {
+    try {
+      const timestamp = Date.now();
+      const expiresAt = timestamp + (expiresIn * 1000);
+      const payload = `${data}:${expiresAt}`;
+      
+      // Create HMAC signature
+      const signature = crypto
+        .createHmac('sha256', config.jwt.secret)
+        .update(payload)
+        .digest('hex');
+      
+      // Combine: data:timestamp:signature
+      const signedState = `${data}:${expiresAt}:${signature}`;
+      
+      // Base64 encode for URL safety
+      return Buffer.from(signedState).toString('base64url');
+    } catch (error) {
+      throw new Error(`Failed to sign state: ${error.message}`);
+    }
+  }
+
+  /**
+   * Validate a signed state parameter
+   * @param {string} signedState - Signed state parameter from OAuth callback
+   * @returns {Object} Validation result with { valid: boolean, data: string, error?: string }
+   */
+  validateSignedState(signedState) {
+    try {
+      // Decode base64url
+      const decoded = Buffer.from(signedState, 'base64url').toString('utf-8');
+      const parts = decoded.split(':');
+      
+      if (parts.length !== 3) {
+        return {
+          valid: false,
+          data: null,
+          error: 'Invalid state format'
+        };
+      }
+      
+      const [data, expiresAt, signature] = parts;
+      const timestamp = parseInt(expiresAt, 10);
+      
+      // Check expiration
+      if (Date.now() > timestamp) {
+        return {
+          valid: false,
+          data: null,
+          error: 'State parameter expired'
+        };
+      }
+      
+      // Verify signature
+      const payload = `${data}:${expiresAt}`;
+      const expectedSignature = crypto
+        .createHmac('sha256', config.jwt.secret)
+        .update(payload)
+        .digest('hex');
+      
+      // Use timing-safe comparison
+      if (!crypto.timingSafeEqual(
+        Buffer.from(signature),
+        Buffer.from(expectedSignature)
+      )) {
+        return {
+          valid: false,
+          data: null,
+          error: 'Invalid state signature'
+        };
+      }
+      
+      return {
+        valid: true,
+        data: data
+      };
+    } catch (error) {
+      return {
+        valid: false,
+        data: null,
+        error: `State validation failed: ${error.message}`
+      };
+    }
+  }
+
+  /**
+   * Validate redirect URI against allowed list
+   * @param {string} redirectUri - Redirect URI to validate
+   * @param {Array<string>} allowedUris - List of allowed redirect URIs
+   * @returns {boolean} True if valid, false otherwise
+   */
+  validateRedirectUri(redirectUri, allowedUris = []) {
+    try {
+      if (!redirectUri || !allowedUris || allowedUris.length === 0) {
+        // If no allowed URIs specified, use default Google OAuth redirect URIs
+        const defaultUris = [
+          process.env.GOOGLE_REDIRECT_URI,
+          'http://localhost:5173',
+          'https://gc-frontend-ten.vercel.app',
+          'http://localhost:3001/api/v1/auth/google/callback'
+        ].filter(Boolean);
+        
+        return defaultUris.some(uri => {
+          try {
+            const url1 = new URL(redirectUri);
+            const url2 = new URL(uri);
+            return url1.origin === url2.origin;
+          } catch {
+            return redirectUri === uri;
+          }
+        });
+      }
+      
+      return allowedUris.some(uri => {
+        try {
+          const url1 = new URL(redirectUri);
+          const url2 = new URL(uri);
+          return url1.origin === url2.origin;
+        } catch {
+          return redirectUri === uri;
+        }
+      });
+    } catch (error) {
+      console.error('Redirect URI validation error:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Validate Google OAuth URL signature
+   * This validates that a URL/state parameter was signed by this service
+   * @param {string} urlOrState - URL or state parameter to validate
+   * @returns {Object} Validation result
+   */
+  validateGoogleUrlSignature(urlOrState) {
+    try {
+      // If it's a URL, extract state parameter
+      let stateParam = urlOrState;
+      
+      if (urlOrState.includes('?')) {
+        const url = new URL(urlOrState);
+        stateParam = url.searchParams.get('state');
+        
+        if (!stateParam) {
+          return {
+            valid: false,
+            error: 'No state parameter found in URL'
+          };
+        }
+      }
+      
+      // Validate the signed state
+      return this.validateSignedState(stateParam);
+    } catch (error) {
+      return {
+        valid: false,
+        error: `URL signature validation failed: ${error.message}`
+      };
     }
   }
 }

@@ -1,6 +1,7 @@
 import AuthService from '../../services/implementations/AuthService.js';
 import { RegisterRequest, LoginRequest, RefreshTokenRequest } from '../../interfaces/requests/AuthRequests.js';
 import { asyncHandler } from '../../middleware/error/errorMiddleware.js';
+import crypto from 'crypto';
 
 /**
  * Authentication Controller
@@ -382,6 +383,70 @@ class AuthController {
 
     const result = await this.authService.setPasswordForGoogleUser(userId, password);
     res.status(200).json(result);
+  });
+
+  /**
+   * Generate signed state parameter for Google OAuth
+   * @param {Object} req - Express request object
+   * @param {Object} res - Express response object
+   */
+  generateSignedState = asyncHandler(async (req, res) => {
+    const { data, expiresIn } = req.body;
+    
+    // Use session ID or user ID if available, otherwise use random data
+    const stateData = data || req.userId || crypto.randomBytes(16).toString('hex');
+    const signedState = this.authService.signState(stateData, expiresIn);
+    
+    res.status(200).json({
+      success: true,
+      statusCode: 200,
+      data: {
+        state: signedState,
+        expiresIn: expiresIn || 600
+      },
+      timestamp: new Date().toISOString()
+    });
+  });
+
+  /**
+   * Validate signed state parameter or URL
+   * @param {Object} req - Express request object
+   * @param {Object} res - Express response object
+   */
+  validateSignedUrl = asyncHandler(async (req, res) => {
+    const { url, state } = req.body;
+    
+    if (!url && !state) {
+      return res.status(400).json({
+        success: false,
+        statusCode: 400,
+        message: 'URL or state parameter is required',
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    const validation = url 
+      ? this.authService.validateGoogleUrlSignature(url)
+      : this.authService.validateSignedState(state);
+    
+    if (validation.valid) {
+      res.status(200).json({
+        success: true,
+        statusCode: 200,
+        data: {
+          valid: true,
+          data: validation.data
+        },
+        timestamp: new Date().toISOString()
+      });
+    } else {
+      res.status(401).json({
+        success: false,
+        statusCode: 401,
+        message: validation.error || 'Invalid signature',
+        timestamp: new Date().toISOString()
+      });
+    }
   });
 }
 
