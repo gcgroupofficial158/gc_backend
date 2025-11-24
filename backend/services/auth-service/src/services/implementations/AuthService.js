@@ -651,26 +651,14 @@ class AuthService extends IAuthService {
         await this.userRepository.addRefreshToken(user._id, refreshToken);
       }
 
-      const response = new AuthResponse(
-        true,
-        200,
-        'Google authentication successful',
-        {
-          user: {
-            id: user._id,
-            firstName: user.firstName,
-            lastName: user.lastName,
-            email: user.email,
-            emailVerified: user.emailVerified,
-            profilePicture: user.profilePicture,
-            provider: user.provider
-          },
-          tokens: {
-            accessToken: accessToken,
-            refreshToken: refreshToken
-          }
-        }
-      );
+      // Ensure user object has correct field mapping for UserEntity
+      const userForEntity = {
+        ...user.toObject ? user.toObject() : user,
+        id: user._id || user.id,
+        isEmailVerified: user.isEmailVerified !== undefined ? user.isEmailVerified : user.emailVerified || false
+      };
+      const userEntity = new UserEntity(userForEntity);
+      const response = new LoginResponse(userEntity, accessToken, refreshToken);
 
       // Add session data to response
       if (sessionData) {
@@ -746,26 +734,14 @@ class AuthService extends IAuthService {
         'unknown'  // User agent not available in callback
       );
 
-      const response = new AuthResponse(
-        true,
-        200,
-        'Google OAuth callback successful',
-        {
-          user: {
-            id: user._id,
-            firstName: user.firstName,
-            lastName: user.lastName,
-            email: user.email,
-            emailVerified: user.emailVerified,
-            profilePicture: user.profilePicture,
-            provider: user.provider
-          },
-          tokens: {
-            accessToken: jwtTokens.accessToken,
-            refreshToken: jwtTokens.refreshToken
-          }
-        }
-      );
+      // Ensure user object has correct field mapping for UserEntity
+      const userForEntity = {
+        ...user.toObject ? user.toObject() : user,
+        id: user._id || user.id,
+        isEmailVerified: user.isEmailVerified !== undefined ? user.isEmailVerified : user.emailVerified || false
+      };
+      const userEntity = new UserEntity(userForEntity);
+      const response = new LoginResponse(userEntity, jwtTokens.accessToken, jwtTokens.refreshToken);
 
       // Add session data to response
       if (sessionData) {
