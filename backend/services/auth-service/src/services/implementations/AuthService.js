@@ -1,5 +1,6 @@
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
+import { OAuth2Client } from 'google-auth-library';
 import config from '../../config/config.js';
 import IAuthService from '../interfaces/IAuthService.js';
 import UserRepository from '../../repositories/implementations/UserRepository.js';
@@ -792,7 +793,6 @@ class AuthService extends IAuthService {
     }
 
     try {
-      const { OAuth2Client } = require('google-auth-library');
       const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
       const ticket = await client.verifyIdToken({
         idToken: idToken,
@@ -812,7 +812,6 @@ class AuthService extends IAuthService {
    */
   async exchangeCodeForTokens(code) {
     try {
-      const { OAuth2Client } = require('google-auth-library');
       const client = new OAuth2Client(
         process.env.GOOGLE_CLIENT_ID,
         process.env.GOOGLE_CLIENT_SECRET,
