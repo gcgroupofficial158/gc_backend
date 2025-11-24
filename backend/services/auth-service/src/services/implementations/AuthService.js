@@ -554,7 +554,14 @@ class AuthService extends IAuthService {
    */
   async googleAuth(idToken, req = null) {
     try {
-      // Verify Google ID token
+      if (!process.env.GOOGLE_CLIENT_ID) {
+        throw new AuthErrorResponse(
+          'Google OAuth not configured. Please contact support.',
+          500,
+          'CONFIG_ERROR'
+        );
+      }
+
       const googleUser = await this.verifyGoogleToken(idToken);
       
       if (!googleUser) {
@@ -779,19 +786,21 @@ class AuthService extends IAuthService {
    * @returns {Promise<Object|null>} Decoded token payload or null
    */
   async verifyGoogleToken(idToken) {
+    if (!process.env.GOOGLE_CLIENT_ID) {
+      console.error('GOOGLE_CLIENT_ID not set in environment');
+      return null;
+    }
+
     try {
       const { OAuth2Client } = require('google-auth-library');
       const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
-      
       const ticket = await client.verifyIdToken({
         idToken: idToken,
         audience: process.env.GOOGLE_CLIENT_ID,
       });
-      
-      const payload = ticket.getPayload();
-      return payload;
+      return ticket.getPayload();
     } catch (error) {
-      console.error('Google token verification failed:', error);
+      console.error('Google token verification failed:', error.message);
       return null;
     }
   }
